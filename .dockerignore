@@ -1,0 +1,14 @@
+.git/
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.pyc
+*.log
+.env
+.env.local
+backend/ml/data/
+frontend/dist/
+.pytest_cache/
+htmlcov/
+.DS_Store

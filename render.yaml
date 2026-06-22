@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: worldcup-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # set manually in Render dashboard
+      - key: FOOTBALL_API_PROVIDER
+        value: espn
+      - key: ENVIRONMENT
+        value: production
+      - key: ALLOWED_ORIGINS
+        sync: false          # set to your Vercel URL after deploying frontend
