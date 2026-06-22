@@ -69,33 +69,3 @@ async def health() -> dict:
         "model_loaded": prediction_engine._artifact is not None,
         "provider": settings.football_api_provider,
     }
-
-
-@app.get("/health/debug", tags=["health"])
-async def health_debug() -> dict:
-    from pathlib import Path
-    from sqlalchemy import text
-    info: dict = {}
-    # DB connectivity
-    try:
-        async with AsyncSessionLocal() as db:
-            await db.execute(text("SELECT 1"))
-        info["db"] = "ok"
-    except Exception as exc:
-        info["db"] = f"ERROR: {exc}"
-    # model_versions row
-    try:
-        from sqlalchemy import select
-        from app.models.model_version import ModelVersion
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(ModelVersion).where(ModelVersion.model_type == "prematch", ModelVersion.is_active.is_(True))
-            )
-            mv = result.scalars().first()
-        if mv:
-            info["model_version"] = {"id": mv.id, "artifact_path": mv.artifact_path, "file_exists": Path(mv.artifact_path).exists()}
-        else:
-            info["model_version"] = "NOT FOUND"
-    except Exception as exc:
-        info["model_version"] = f"ERROR: {exc}"
-    return info
