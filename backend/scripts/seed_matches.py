@@ -143,11 +143,9 @@ async def main() -> None:
             t.country_code: t.id for t in result.scalars().all()
         }
 
-        missing = {
-            f["home_code"] for f in fixtures
-        } | {
-            f["away_code"] for f in fixtures
-        } - set(teams_by_code.keys())
+        missing = (
+            {f["home_code"] for f in fixtures} | {f["away_code"] for f in fixtures}
+        ) - set(teams_by_code.keys())
 
         if missing:
             print(

@@ -79,6 +79,7 @@ class PredictionEngine:
     def __init__(self) -> None:
         self._artifact: dict[str, Any] | None = None
         self._historical_results: pd.DataFrame | None = None
+        self._elo_ratings: dict[str, float] = {}
         self._statsbomb_xg: dict[str, float] = {}
         self._model_version_id: int | None = None
 
@@ -146,7 +147,7 @@ class PredictionEngine:
         )
 
         # 3. Historical results CSV
-        raw_csv = Path(__file__).resolve().parents[3] / "ml" / "data" / "raw" / "results.csv"
+        raw_csv = Path(__file__).resolve().parents[2] / "ml" / "data" / "raw" / "results.csv"
         if raw_csv.exists():
             self._historical_results = pd.read_csv(raw_csv, parse_dates=["date"])
             logger.info(
@@ -165,9 +166,14 @@ class PredictionEngine:
                 columns=["date", "home_team", "away_team", "home_score", "away_score", "tournament"]
             )
 
-        # 4. StatsBomb xG (optional)
+        # 4. Pre-compute Elo ratings from full history
+        from ml.features import compute_elo_ratings
+        self._elo_ratings = compute_elo_ratings(self._historical_results)
+        logger.info("Computed Elo ratings for %d teams", len(self._elo_ratings))
+
+        # 5. StatsBomb xG (optional)
         statsbomb_path = (
-            Path(__file__).resolve().parents[3] / "ml" / "data" / "raw" / "statsbomb_xg.json"
+            Path(__file__).resolve().parents[2] / "ml" / "data" / "raw" / "statsbomb_xg.json"
         )
         if statsbomb_path.exists():
             import json
@@ -198,8 +204,8 @@ class PredictionEngine:
         self,
         home_team_name: str,
         away_team_name: str,
-        home_fifa_ranking: int,
-        away_fifa_ranking: int,
+        home_fifa_ranking: int = 100,
+        away_fifa_ranking: int = 100,
     ) -> PredictionResult:
         """Run calibrated pre-match inference for a single fixture.
 
@@ -235,10 +241,10 @@ class PredictionEngine:
         features = build_prematch_features(
             home_team_name=home_team_name,
             away_team_name=away_team_name,
-            home_fifa_ranking=home_fifa_ranking,
-            away_fifa_ranking=away_fifa_ranking,
             historical_results=self._historical_results,
             statsbomb_xg=self._statsbomb_xg,
+            elo_ratings=self._elo_ratings,
+            is_neutral_venue=False,
         )
 
         # 2. Build ordered numpy array matching artifact feature_columns
@@ -336,9 +342,17 @@ class PredictionEngine:
             inner_model = model.calibrated_classifiers_[0].estimator
             explainer = shap.TreeExplainer(inner_model)
             shap_values = explainer.shap_values(X)
-            # shap_values shape: (3, n_samples, n_features) for multi-class XGBoost
-            # For n_samples=1: shap_values[class_idx][0] → (n_features,)
-            shap_for_class: np.ndarray = shap_values[predicted_class][0]
+            # SHAP changed its output format between versions:
+            # - Old (<0.41): list of (n_samples, n_features) per class
+            # - New (>=0.41): ndarray of (n_samples, n_features, n_classes)
+            if isinstance(shap_values, list):
+                shap_for_class: np.ndarray = shap_values[predicted_class][0]
+            else:
+                sv = np.asarray(shap_values)
+                if sv.ndim == 3:
+                    shap_for_class = sv[0, :, predicted_class]
+                else:
+                    shap_for_class = sv[0]
         except Exception as exc:
             logger.warning("SHAP computation failed: %s — top_factors will be empty.", exc)
             return []

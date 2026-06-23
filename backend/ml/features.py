@@ -1,18 +1,15 @@
 """
 Feature engineering module for the World Cup 2026 AI prediction model.
 
-Computes the 14 pre-match features consumed by the XGBoost classifier from:
+Computes the 15 pre-match features consumed by the XGBoost classifier from:
   - Historical international results (Kaggle CSV)
-  - FIFA rankings (caller-supplied)
+  - Elo ratings pre-computed from that history
   - StatsBomb xG aggregates (team_name -> avg xG per match)
 
 All lookback windows:
   - Form: last 5 matches per team (home OR away)
   - Goals scored / conceded: last 10 matches per team (home OR away)
   - H2H: last 10 matches between the two specific teams
-
-H2H fallback: if fewer than 5 H2H matches exist the three rate features are
-filled with the neutral prior (0.333…) rather than a small-sample estimate.
 """
 
 from __future__ import annotations
@@ -30,9 +27,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 FEATURE_COLUMNS: list[str] = [
-    "home_fifa_ranking",        # int  – lower is better
-    "away_fifa_ranking",        # int
-    "ranking_diff",             # int  – home - away (negative = home is stronger)
+    "home_elo",                 # float – Elo rating of home team
+    "away_elo",                 # float – Elo rating of away team
+    "elo_diff",                 # float – home_elo - away_elo
     "home_form_points",         # float – sum of pts from last 5 matches (W=3, D=1, L=0)
     "away_form_points",         # float
     "form_diff",                # float – home_form_points - away_form_points
@@ -44,7 +41,14 @@ FEATURE_COLUMNS: list[str] = [
     "h2h_draw_rate",            # float 0-1
     "home_xg_avg",              # float – avg xG scored per match (StatsBomb)
     "away_xg_avg",              # float
+    "is_neutral_venue",         # float 0/1 – 1 if played at neutral venue
 ]
+
+# Elo constants (must match train_prematch.py)
+ELO_INITIAL: float = 1500.0
+ELO_K: float = 20.0
+ELO_K_WC: float = 30.0
+ELO_HOME_ADV: float = 100.0
 
 # Minimum H2H matches required to trust the observed win rates.
 _MIN_H2H_MATCHES: int = 5
@@ -52,6 +56,46 @@ _MIN_H2H_MATCHES: int = 5
 # Neutral prior used when H2H sample is too small.
 _NEUTRAL_WIN_RATE: float = 1 / 3
 _NEUTRAL_DRAW_RATE: float = 1 / 3
+
+
+# ---------------------------------------------------------------------------
+# Elo helpers
+# ---------------------------------------------------------------------------
+
+def compute_elo_ratings(df: pd.DataFrame) -> dict[str, float]:
+    """Replay all matches chronologically and return final Elo ratings per team.
+
+    Matches are sorted by date; teams absent from the history start at ELO_INITIAL.
+    World Cup / Copa América / UEFA championship matches use ELO_K_WC.
+    """
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date", "home_score", "away_score"])
+    df = df.sort_values("date").reset_index(drop=True)
+
+    ratings: dict[str, float] = {}
+    wc_keywords = {"FIFA World Cup", "Copa América", "UEFA Euro", "AFC Asian Cup", "Africa Cup"}
+
+    for _, row in df.iterrows():
+        home, away = str(row["home_team"]), str(row["away_team"])
+        neutral = bool(row.get("neutral", False))
+        tournament = str(row.get("tournament", ""))
+
+        h_elo = ratings.get(home, ELO_INITIAL)
+        a_elo = ratings.get(away, ELO_INITIAL)
+        k = ELO_K_WC if any(kw in tournament for kw in wc_keywords) else ELO_K
+        adv = 0.0 if neutral else ELO_HOME_ADV
+
+        exp = 1.0 / (1.0 + 10.0 ** ((a_elo - h_elo - adv) / 400.0))
+        hs, as_ = int(row["home_score"]), int(row["away_score"])
+        actual = 1.0 if hs > as_ else (0.5 if hs == as_ else 0.0)
+        delta = k * (actual - exp)
+
+        ratings[home] = h_elo + delta
+        ratings[away] = a_elo - delta
+
+    return ratings
+
 
 # ---------------------------------------------------------------------------
 # FACTOR_LABELS – plain-English templates for SHAP narration
@@ -198,6 +242,8 @@ def _compute_form_points(df: pd.DataFrame, team: str, n: int = 5) -> float:
 
     points_total: float = 0.0
     for _, row in recent.iterrows():
+        if pd.isna(row["home_score"]) or pd.isna(row["away_score"]):
+            continue
         home_score = int(row["home_score"])
         away_score = int(row["away_score"])
         is_home = row["home_team"] == team
@@ -246,6 +292,8 @@ def _compute_avg_goals(
     conceded_list: list[int] = []
 
     for _, row in recent.iterrows():
+        if pd.isna(row["home_score"]) or pd.isna(row["away_score"]):
+            continue
         home_score = int(row["home_score"])
         away_score = int(row["away_score"])
         if row["home_team"] == team:
@@ -321,6 +369,8 @@ def _compute_h2h_rates(
     home_wins = 0
     draws = 0
     for _, row in h2h.iterrows():
+        if pd.isna(row["home_score"]) or pd.isna(row["away_score"]):
+            continue
         home_score = int(row["home_score"])
         away_score = int(row["away_score"])
         actual_home = row["home_team"]
@@ -358,10 +408,10 @@ def _default_xg(statsbomb_xg: dict[str, float]) -> float:
 def build_prematch_features(
     home_team_name: str,
     away_team_name: str,
-    home_fifa_ranking: int,
-    away_fifa_ranking: int,
     historical_results: pd.DataFrame,
     statsbomb_xg: dict[str, float],
+    elo_ratings: dict[str, float] | None = None,
+    is_neutral_venue: bool = False,
 ) -> dict[str, float]:
     """Build the 14 pre-match feature dict for one fixture.
 
@@ -371,10 +421,6 @@ def build_prematch_features(
         Name of the home team, matching values in ``historical_results``.
     away_team_name:
         Name of the away team.
-    home_fifa_ranking:
-        Current FIFA ranking of the home team (integer; 1 = best).
-    away_fifa_ranking:
-        Current FIFA ranking of the away team.
     historical_results:
         DataFrame with columns:
         ``date, home_team, away_team, home_score, away_score, tournament``.
@@ -433,11 +479,16 @@ def build_prematch_features(
     home_xg_avg = statsbomb_xg.get(home_team_name, default_xg)
     away_xg_avg = statsbomb_xg.get(away_team_name, default_xg)
 
+    # --- Elo ratings ---
+    _ratings = elo_ratings or {}
+    home_elo = _ratings.get(home_team_name, ELO_INITIAL)
+    away_elo = _ratings.get(away_team_name, ELO_INITIAL)
+
     # --- Assemble feature dict (order mirrors FEATURE_COLUMNS) ---
     features: dict[str, float] = {
-        "home_fifa_ranking": float(home_fifa_ranking),
-        "away_fifa_ranking": float(away_fifa_ranking),
-        "ranking_diff": float(home_fifa_ranking - away_fifa_ranking),
+        "home_elo": home_elo,
+        "away_elo": away_elo,
+        "elo_diff": home_elo - away_elo,
         "home_form_points": home_form,
         "away_form_points": away_form,
         "form_diff": home_form - away_form,
@@ -449,6 +500,7 @@ def build_prematch_features(
         "h2h_draw_rate": h2h_draw_rate,
         "home_xg_avg": home_xg_avg,
         "away_xg_avg": away_xg_avg,
+        "is_neutral_venue": float(is_neutral_venue),
     }
 
     # Sanity-check: all keys accounted for (catches typos during development).
