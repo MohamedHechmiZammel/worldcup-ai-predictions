@@ -26,7 +26,7 @@ export default function MatchDetail() {
   const { connectionState } = useWebSocket(matchId);
 
   const livePrediction = usePredictionsStore(s => s.predictions[matchId]);
-  const liveEvents = usePredictionsStore(s => s.liveEvents[matchId] ?? []);
+  const liveEvents = usePredictionsStore(s => s.liveEvents[matchId]) ?? [];
   const feedAvailable = usePredictionsStore(s => s.feedStatus[matchId] ?? true);
 
   if (isLoading) {
