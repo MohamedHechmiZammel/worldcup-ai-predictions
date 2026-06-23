@@ -31,19 +31,21 @@ from app.models.team import Team
 # Tournament configuration
 # ---------------------------------------------------------------------------
 
+# Official 2026 World Cup group draw (held 2025-12-05). Codes must match
+# seed_teams.py. Order within each group = draw positions 1-4 (e.g. A1..A4).
 GROUPS: dict[str, list[str]] = {
-    "A": ["MEX", "JAM", "VEN", "ECU"],
-    "B": ["ARG", "CHI", "PER", "CAN"],
-    "C": ["BRA", "PAR", "COL", "BOL"],
-    "D": ["URU", "USA", "PAN", "CUB"],
-    "E": ["ESP", "NED", "SRB", "MAR"],
-    "F": ["GER", "BEL", "UKR", "KSA"],
-    "G": ["FRA", "POR", "CRO", "AUS"],
-    "H": ["ENG", "ITA", "ROU", "ALG"],
-    "I": ["JPN", "KOR", "IRN", "NZL"],
-    "J": ["QAT", "IRQ", "JOR", "UZB"],
-    "K": ["SEN", "EGY", "TUN", "RSA"],
-    "L": ["NGA", "CMR", "COD", "CIV"],
+    "A": ["MEX", "RSA", "KOR", "CZE"],
+    "B": ["CAN", "BIH", "QAT", "SUI"],
+    "C": ["BRA", "MAR", "HAI", "SCO"],
+    "D": ["USA", "PAR", "AUS", "TUR"],
+    "E": ["GER", "CUW", "CIV", "ECU"],
+    "F": ["NED", "JPN", "SWE", "TUN"],
+    "G": ["BEL", "EGY", "IRN", "NZL"],
+    "H": ["ESP", "CPV", "KSA", "URU"],
+    "I": ["FRA", "SEN", "IRQ", "NOR"],
+    "J": ["ARG", "ALG", "AUT", "JOR"],
+    "K": ["POR", "COD", "UZB", "COL"],
+    "L": ["ENG", "CRO", "GHA", "PAN"],
 }
 
 # Venue pool — rotated round-robin across all 72 matches
