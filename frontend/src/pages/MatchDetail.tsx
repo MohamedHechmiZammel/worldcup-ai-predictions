@@ -7,6 +7,7 @@ import FactorsPanel from '../components/FactorsPanel';
 import LiveBadge from '../components/LiveBadge';
 import LiveEventLog from '../components/LiveEventLog';
 import FeedStatusBanner from '../components/FeedStatusBanner';
+import { getFlag } from '../utils/flags';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import type { Factor } from '../types';
 
@@ -18,33 +19,30 @@ export default function MatchDetail() {
   const { data: history } = usePredictionHistory(matchId);
   const { connectionState } = useWebSocket(matchId);
 
-  // Live data from Zustand store (WebSocket updates)
   const livePrediction = usePredictionsStore(s => s.predictions[matchId]);
   const liveEvents = usePredictionsStore(s => s.liveEvents[matchId] ?? []);
   const feedAvailable = usePredictionsStore(s => s.feedStatus[matchId] ?? true);
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-gray-400">
-        Loading...
+      <div className="min-h-screen bg-pitch flex items-center justify-center">
+        <span className="font-display text-4xl font-bold text-gold animate-pulse">Loading…</span>
       </div>
     );
   }
 
   if (!match) {
     return (
-      <div className="min-h-screen bg-gray-900 p-8">
-        <Link to="/" className="text-blue-400 hover:underline">← Dashboard</Link>
-        <p className="text-red-400 mt-4">Match not found</p>
+      <div className="min-h-screen bg-pitch p-8">
+        <Link to="/" className="text-gold text-sm hover:text-gold-bright">← All Matches</Link>
+        <p className="text-red-400 mt-4">Match not found.</p>
       </div>
     );
   }
 
-  // Use live prediction if available, fall back to REST prediction
   const prediction = livePrediction ?? match.prediction;
   const factors: Factor[] = prediction?.top_factors ?? [];
 
-  // Build probability history for sparkline chart
   const chartData = (history?.predictions ?? []).map((p, i) => ({
     name: `#${i + 1}`,
     home: Math.round(p.home_win_prob * 100),
@@ -52,59 +50,92 @@ export default function MatchDetail() {
     away: Math.round(p.away_win_prob * 100),
   }));
 
+  const showScore = match.status === 'live' || match.status === 'halftime' || match.status === 'finished';
+  const homeFlag = getFlag(match.home_team?.country_code);
+  const awayFlag = getFlag(match.away_team?.country_code);
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-        <Link to="/" className="text-blue-400 text-sm hover:underline">← All Matches</Link>
-        <div className="flex items-center justify-between mt-2">
+    <div className="min-h-screen bg-pitch text-slate-100">
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-20 bg-pitch/95 backdrop-blur border-b border-white/5 px-4 sm:px-6 py-3">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2 text-slate-500 hover:text-white transition-colors text-sm group">
+            <span className="group-hover:-translate-x-0.5 transition-transform">←</span>
+            <span className="font-display font-bold tracking-wide">ALL MATCHES</span>
+          </Link>
           <div className="flex items-center gap-3">
             <LiveBadge status={match.status} scheduledAt={match.scheduled_at} />
-            <span className="text-gray-400 text-sm">{match.stage}</span>
+            <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded ${
+              connectionState === 'connected'  ? 'text-green-400 bg-green-500/10' :
+              connectionState === 'connecting' ? 'text-gold bg-gold/10' :
+                                                'text-slate-600 bg-slate-800'
+            }`}>
+              {connectionState === 'connected'  ? '● WS' :
+               connectionState === 'connecting' ? '○ WS' : '○ WS'}
+            </span>
           </div>
-          <span className={`text-xs px-2 py-1 rounded ${
-            connectionState === 'connected' ? 'text-green-400 bg-green-900/30' :
-            connectionState === 'connecting' ? 'text-yellow-400 bg-yellow-900/30' :
-            'text-red-400 bg-red-900/30'
-          }`}>
-            {connectionState === 'connected' ? '● Live' :
-             connectionState === 'connecting' ? '○ Connecting...' :
-             '○ Disconnected'}
-          </span>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
-        {/* Feed status banner */}
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <FeedStatusBanner available={feedAvailable} lastUpdated={new Date()} />
 
-        {/* Score / Teams */}
-        <div className="bg-gray-800 rounded-xl p-6 text-center">
-          <div className="flex items-center justify-center gap-8">
-            <div className="flex-1 text-right">
-              <p className="text-xl font-bold">{match.home_team?.name ?? 'Home'}</p>
-              <p className="text-gray-400 text-sm">{match.home_team?.country_code}</p>
+        {/* ── Scoreboard card ── */}
+        <div className="bg-card rounded-2xl border border-white/5 overflow-hidden">
+          {/* Stage label */}
+          <div className="px-6 pt-5 pb-2 flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-widest text-slate-600 font-medium">{match.stage}</span>
+            {match.venue && (
+              <span className="text-[11px] text-slate-600 truncate ml-4 max-w-[200px] text-right">
+                {match.venue}, {match.city}
+              </span>
+            )}
+          </div>
+
+          {/* Teams + score */}
+          <div className="flex items-center justify-between px-6 pb-6 gap-4">
+            {/* Home */}
+            <div className="flex-1 flex flex-col items-center gap-2">
+              <span className="text-5xl leading-none select-none">{homeFlag}</span>
+              <p className="text-base font-bold text-white text-center">{match.home_team?.name ?? 'Home'}</p>
+              <p className="text-[11px] text-slate-600 uppercase tracking-widest">{match.home_team?.country_code}</p>
             </div>
-            <div className="text-4xl font-black w-32 text-center">
-              {(match.status === 'live' || match.status === 'halftime' || match.status === 'finished')
-                ? `${match.home_score ?? 0} – ${match.away_score ?? 0}`
-                : 'vs'
-              }
+
+            {/* Center: score or time */}
+            <div className="flex-shrink-0 text-center">
+              {showScore ? (
+                <span className={`font-display text-6xl font-black leading-none tracking-tight${
+                  match.status === 'live' ? ' text-gold' : ' text-white'
+                }`}>
+                  {match.home_score ?? 0}–{match.away_score ?? 0}
+                </span>
+              ) : (
+                <span className="font-display text-xl font-bold text-slate-600 tracking-widest">VS</span>
+              )}
             </div>
-            <div className="flex-1 text-left">
-              <p className="text-xl font-bold">{match.away_team?.name ?? 'Away'}</p>
-              <p className="text-gray-400 text-sm">{match.away_team?.country_code}</p>
+
+            {/* Away */}
+            <div className="flex-1 flex flex-col items-center gap-2">
+              <span className="text-5xl leading-none select-none">{awayFlag}</span>
+              <p className="text-base font-bold text-white text-center">{match.away_team?.name ?? 'Away'}</p>
+              <p className="text-[11px] text-slate-600 uppercase tracking-widest">{match.away_team?.country_code}</p>
             </div>
           </div>
-          {match.venue && (
-            <p className="text-gray-500 text-sm mt-3">{match.venue}, {match.city}</p>
-          )}
         </div>
 
-        {/* Prediction probabilities */}
+        {/* ── AI Prediction ── */}
         {prediction && match.status !== 'finished' && (
-          <div className="bg-gray-800 rounded-xl p-6 space-y-4">
-            <h2 className="text-lg font-semibold">AI Prediction</h2>
+          <div className="bg-card rounded-2xl border border-white/5 p-5 space-y-5">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] uppercase tracking-widest text-slate-600">AI Prediction</p>
+              {prediction.expected_home_goals !== undefined && (
+                <p className="text-[11px] text-slate-500">
+                  xG: <span className="text-slate-300 font-medium tabular-nums">
+                    {prediction.expected_home_goals.toFixed(1)} – {prediction.expected_away_goals.toFixed(1)}
+                  </span>
+                </p>
+              )}
+            </div>
             <ProbabilityBar
               homeWinProb={prediction.home_win_prob}
               drawProb={prediction.draw_prob}
@@ -114,35 +145,39 @@ export default function MatchDetail() {
               confidenceLow={prediction.confidence_low}
               confidenceHigh={prediction.confidence_high}
             />
-            <FactorsPanel factors={factors} />
-            <p className="text-xs text-gray-500">
-              Expected: {prediction.expected_home_goals.toFixed(1)} – {prediction.expected_away_goals.toFixed(1)} goals
-            </p>
+            {factors.length > 0 && (
+              <div className="pt-3 border-t border-white/[0.06]">
+                <FactorsPanel factors={factors} />
+              </div>
+            )}
           </div>
         )}
 
-        {/* Probability history sparkline */}
+        {/* ── Probability timeline ── */}
         {chartData.length > 1 && (
-          <div className="bg-gray-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4">Probability Timeline</h2>
+          <div className="bg-card rounded-2xl border border-white/5 p-5">
+            <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-4">Probability Timeline</p>
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={chartData}>
-                <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                <YAxis domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: '#1f2937', border: 'none', borderRadius: 8 }} />
-                <Legend />
-                <Line type="monotone" dataKey="home" stroke="#3b82f6" strokeWidth={2} dot={false} name="Home Win %" />
-                <Line type="monotone" dataKey="draw" stroke="#6b7280" strokeWidth={2} dot={false} name="Draw %" />
-                <Line type="monotone" dataKey="away" stroke="#ef4444" strokeWidth={2} dot={false} name="Away Win %" />
+                <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 10 }} />
+                <YAxis domain={[0, 100]} tick={{ fill: '#475569', fontSize: 10 }} width={28} />
+                <Tooltip
+                  contentStyle={{ background: '#0F172A', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, fontSize: 11 }}
+                  labelStyle={{ color: '#94A3B8' }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11, color: '#64748B' }} />
+                <Line type="monotone" dataKey="home" stroke="#3B82F6" strokeWidth={2} dot={false} name="Home %" />
+                <Line type="monotone" dataKey="draw"  stroke="#475569" strokeWidth={2} dot={false} name="Draw %" />
+                <Line type="monotone" dataKey="away"  stroke="#EF4444" strokeWidth={2} dot={false} name="Away %" />
               </LineChart>
             </ResponsiveContainer>
           </div>
         )}
 
-        {/* Live event log */}
+        {/* ── Live event log ── */}
         {(match.status === 'live' || match.status === 'halftime' || liveEvents.length > 0) && (
-          <div className="bg-gray-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4">Match Events</h2>
+          <div className="bg-card rounded-2xl border border-white/5 p-5">
+            <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-4">Match Events</p>
             <LiveEventLog events={liveEvents} />
           </div>
         )}

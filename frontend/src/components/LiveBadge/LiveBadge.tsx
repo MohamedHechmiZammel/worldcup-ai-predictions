@@ -4,65 +4,58 @@ type MatchStatus = 'scheduled' | 'live' | 'halftime' | 'finished' | 'postponed' 
 
 interface LiveBadgeProps {
   status: MatchStatus;
-  scheduledAt?: string; // ISO datetime string, shown for scheduled matches
+  scheduledAt?: string;
 }
 
-function formatScheduledAt(iso: string): string {
-  const date = new Date(iso);
-  const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-  const day = date.getUTCDate();
-  const hours = String(date.getUTCHours()).padStart(2, '0');
-  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-  return `${month} ${day} · ${hours}:${minutes} UTC`;
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+  const day = d.getUTCDate();
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${month} ${day} · ${hh}:${mm} UTC`;
 }
 
 const LiveBadge: React.FC<LiveBadgeProps> = ({ status, scheduledAt }) => {
   switch (status) {
     case 'live':
       return (
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-red-400 font-bold text-xs">LIVE</span>
+        <span className="inline-flex items-center gap-1.5 font-display font-bold text-xs tracking-widest text-green-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+          LIVE
         </span>
       );
-
     case 'halftime':
       return (
-        <span className="inline-flex items-center rounded-full bg-yellow-600 px-2 py-0.5 text-xs font-bold text-black">
-          HT
+        <span className="inline-flex items-center px-2 py-0.5 rounded font-display font-bold text-xs tracking-widest bg-gold/10 text-gold border border-gold/30">
+          HALF TIME
         </span>
       );
-
     case 'finished':
       return (
-        <span className="inline-flex items-center rounded-full bg-gray-600 px-2 py-0.5 text-xs font-bold text-gray-200">
-          FT
+        <span className="inline-flex items-center px-2 py-0.5 rounded font-display font-bold text-[10px] tracking-widest bg-slate-700/50 text-slate-400 border border-slate-600/30">
+          FULL TIME
         </span>
       );
-
-    case 'scheduled':
-      return (
-        <span className="text-xs text-gray-400">
-          {scheduledAt ? formatScheduledAt(scheduledAt) : '—'}
-        </span>
-      );
-
     case 'postponed':
       return (
-        <span className="text-xs font-bold text-orange-400">
-          POSTPONED
+        <span className="text-[11px] font-bold tracking-widest text-orange-400 uppercase">
+          Postponed
         </span>
       );
-
     case 'cancelled':
       return (
-        <span className="text-xs font-bold text-red-400 line-through">
-          CANCELLED
+        <span className="text-[11px] font-bold tracking-widest text-red-400 uppercase line-through">
+          Cancelled
         </span>
       );
-
+    case 'scheduled':
     default:
-      return null;
+      return (
+        <span className="text-[11px] text-slate-500 tabular-nums">
+          {scheduledAt ? formatDate(scheduledAt) : '—'}
+        </span>
+      );
   }
 };
 
