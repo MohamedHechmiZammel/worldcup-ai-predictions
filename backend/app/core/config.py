@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     football_api_provider: str = "mock"
     environment: str = "development"
     allowed_origins: str = "http://localhost:5173"
+    admin_key: str = ""  # set ADMIN_KEY env var to enable admin endpoints in production
 
     @property
     def database_url_clean(self) -> str:
