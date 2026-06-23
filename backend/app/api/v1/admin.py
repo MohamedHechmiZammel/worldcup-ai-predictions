@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 from datetime import date, timedelta
 
 import httpx
@@ -48,15 +49,14 @@ ESPN_TO_CODE: dict[str, str] = {
 
 
 async def _require_admin(x_admin_key: str = Header(default="")) -> None:
-    """Dependency that enforces ADMIN_KEY in production."""
-    if settings.admin_key:
-        if x_admin_key != settings.admin_key:
-            raise HTTPException(status_code=401, detail="Invalid X-Admin-Key header")
-    elif settings.is_production:
+    """Default-deny admin gate: blocks unless ADMIN_KEY is configured AND matches."""
+    if not settings.admin_key:
         raise HTTPException(
-            status_code=403,
-            detail="Set the ADMIN_KEY environment variable on Render to enable admin endpoints",
+            status_code=503,
+            detail="Admin endpoints are disabled: set the ADMIN_KEY environment variable.",
         )
+    if not secrets.compare_digest(x_admin_key, settings.admin_key):
+        raise HTTPException(status_code=401, detail="Invalid X-Admin-Key header")
 
 
 # ---------------------------------------------------------------------------
