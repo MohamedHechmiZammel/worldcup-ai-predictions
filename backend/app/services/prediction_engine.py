@@ -490,6 +490,81 @@ class PredictionEngine:
 
         return prediction_result
 
+    # ------------------------------------------------------------------
+    # Post-match learning
+    # ------------------------------------------------------------------
+
+    def update_elo_after_result(
+        self,
+        home_team: str,
+        away_team: str,
+        home_score: int,
+        away_score: int,
+    ) -> None:
+        """Update in-memory Elo ratings after a completed match.
+
+        All WC 2026 fixtures are played at neutral venues (USA/Canada/Mexico),
+        so no home-field advantage is applied.  The updated ratings are used
+        immediately by the next call to ``predict_prematch``.
+        """
+        from ml.features import ELO_INITIAL, ELO_K_WC
+
+        h_elo = self._elo_ratings.get(home_team, ELO_INITIAL)
+        a_elo = self._elo_ratings.get(away_team, ELO_INITIAL)
+
+        expected_home = 1.0 / (1.0 + 10.0 ** ((a_elo - h_elo) / 400.0))
+        actual_home = 1.0 if home_score > away_score else (0.5 if home_score == away_score else 0.0)
+        delta = ELO_K_WC * (actual_home - expected_home)
+
+        self._elo_ratings[home_team] = h_elo + delta
+        self._elo_ratings[away_team] = a_elo - delta
+
+        logger.info(
+            "Elo updated after %s %d–%d %s: %s %.0f→%.0f, %s %.0f→%.0f",
+            home_team, home_score, away_score, away_team,
+            home_team, h_elo, self._elo_ratings[home_team],
+            away_team, a_elo, self._elo_ratings[away_team],
+        )
+
+    async def recalculate_remaining_matches(
+        self,
+        team_a_name: str,
+        team_b_name: str,
+        db: AsyncSession,
+    ) -> int:
+        """Re-run prematch predictions for all scheduled matches of the two teams.
+
+        Called right after ``update_elo_after_result`` so revised Elo ratings
+        feed into fresh predictions for remaining fixtures.  Returns the count
+        of matches re-predicted.
+        """
+        if self._artifact is None:
+            return 0
+
+        from sqlalchemy.orm import selectinload as _sl
+
+        all_stmt = (
+            select(Match)
+            .options(_sl(Match.home_team), _sl(Match.away_team))
+            .where(Match.status == "scheduled")
+        )
+        result = await db.execute(all_stmt)
+        scheduled = result.scalars().all()
+
+        teams = {team_a_name, team_b_name}
+        count = 0
+        for m in scheduled:
+            home = m.home_team.name if m.home_team else ""
+            away = m.away_team.name if m.away_team else ""
+            if home in teams or away in teams:
+                await self.predict_and_save(m.id, db)
+                count += 1
+
+        logger.info(
+            "Re-predicted %d remaining matches after Elo update for %s / %s",
+            count, team_a_name, team_b_name,
+        )
+        return count
 
     # ------------------------------------------------------------------
     # In-game (live) prediction

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMatches } from '../hooks/useMatches';
 import MatchCard from '../components/MatchCard';
 import AccuracyPanel from '../components/AccuracyPanel';
+import GroupStandings from '../components/GroupStandings';
 
 const GROUP_LETTERS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
 const KNOCKOUT_STAGES = ['Round of 32','Round of 16','Quarter-finals','Semi-finals','Third place','Final'];
@@ -181,6 +182,13 @@ export default function Dashboard() {
                   />
                 ))}
               </div>
+
+              {/* Group standings — only for group stage tabs */}
+              {activeTab.startsWith('Group ') && (
+                <div className="mt-6">
+                  <GroupStandings matches={activeMatches} />
+                </div>
+              )}
             </div>
           )
         )}

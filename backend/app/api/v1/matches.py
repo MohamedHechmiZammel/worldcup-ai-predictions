@@ -173,4 +173,10 @@ async def get_match(
     pred_result = await db.execute(pred_stmt)
     latest_pred = pred_result.scalar_one_or_none()
 
-    return _build_match_response(match, latest_pred)
+    accuracy_record: AccuracyRecord | None = None
+    if match.status == "finished":
+        acc_stmt = select(AccuracyRecord).where(AccuracyRecord.match_id == match_id)
+        acc_result = await db.execute(acc_stmt)
+        accuracy_record = acc_result.scalar_one_or_none()
+
+    return _build_match_response(match, latest_pred, accuracy_record)

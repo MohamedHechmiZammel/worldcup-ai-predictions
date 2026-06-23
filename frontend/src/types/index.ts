@@ -74,6 +74,19 @@ export interface AccuracyResponse {
   by_stage: Record<string, number>;
 }
 
+export interface TeamStanding {
+  team: Team;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDiff: number;
+  points: number;
+  projected?: boolean; // true when at least one match is AI-projected
+}
+
 // WebSocket message types
 export type WSMessageType = 'connected' | 'prediction_update' | 'live_event' | 'match_status_change' | 'feed_status' | 'accuracy_update' | 'ping' | 'pong';
 

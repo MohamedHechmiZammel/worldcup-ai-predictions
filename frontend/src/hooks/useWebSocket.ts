@@ -53,8 +53,19 @@ export function useWebSocket(matchId: number) {
   const scheduleReconnectRef = useRef<() => void>(() => undefined);
 
   const connect = useCallback(() => {
-    const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://localhost:8000'}/ws/matches/${matchId}`;
-    const ws = new WebSocket(wsUrl);
+    let base = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+    // Auto-convert http(s) → ws(s) so a misconfigured env var doesn't throw
+    base = base.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+    const wsUrl = `${base}/ws/matches/${matchId}`;
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      // Invalid URL (e.g. wrong scheme) — schedule reconnect instead of crashing
+      scheduleReconnectRef.current();
+      return;
+    }
     wsRef.current = ws;
     setConnectionState('connecting');
 

@@ -11,6 +11,12 @@ import { getFlag } from '../utils/flags';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import type { Factor } from '../types';
 
+const OUTCOME_LABEL: Record<string, string> = {
+  home_win: 'Home Win',
+  draw: 'Draw',
+  away_win: 'Away Win',
+};
+
 export default function MatchDetail() {
   const { id } = useParams<{ id: string }>();
   const matchId = Number(id);
@@ -40,8 +46,14 @@ export default function MatchDetail() {
     );
   }
 
-  const prediction = livePrediction ?? match.prediction;
-  const factors: Factor[] = prediction?.top_factors ?? [];
+  const isFinished = match.status === 'finished';
+  const isLive = match.status === 'live' || match.status === 'halftime';
+  const isUpcoming = match.status === 'scheduled';
+
+  // For live/upcoming: use live WS prediction or fallback to API prediction
+  // For finished: always show the static pre-match prediction from API (for comparison)
+  const displayPrediction = isFinished ? match.prediction : (livePrediction ?? match.prediction);
+  const factors: Factor[] = displayPrediction?.top_factors ?? [];
 
   const chartData = (history?.predictions ?? []).map((p, i) => ({
     name: `#${i + 1}`,
@@ -50,9 +62,13 @@ export default function MatchDetail() {
     away: Math.round(p.away_win_prob * 100),
   }));
 
-  const showScore = match.status === 'live' || match.status === 'halftime' || match.status === 'finished';
   const homeFlag = getFlag(match.home_team?.country_code);
   const awayFlag = getFlag(match.away_team?.country_code);
+
+  // Determine actual outcome label for finished matches
+  const actualOutcome = match.accuracy?.actual_outcome ?? null;
+  const predictedOutcome = match.accuracy?.predicted_outcome ?? null;
+  const wasCorrect = match.accuracy?.was_correct ?? null;
 
   return (
     <div className="min-h-screen bg-pitch text-slate-100">
@@ -65,24 +81,24 @@ export default function MatchDetail() {
           </Link>
           <div className="flex items-center gap-3">
             <LiveBadge status={match.status} scheduledAt={match.scheduled_at} />
-            <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded ${
-              connectionState === 'connected'  ? 'text-green-400 bg-green-500/10' :
-              connectionState === 'connecting' ? 'text-gold bg-gold/10' :
-                                                'text-slate-600 bg-slate-800'
-            }`}>
-              {connectionState === 'connected'  ? '● WS' :
-               connectionState === 'connecting' ? '○ WS' : '○ WS'}
-            </span>
+            {(isLive || isUpcoming) && (
+              <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded ${
+                connectionState === 'connected'  ? 'text-green-400 bg-green-500/10' :
+                connectionState === 'connecting' ? 'text-gold bg-gold/10' :
+                                                  'text-slate-600 bg-slate-800'
+              }`}>
+                {connectionState === 'connected' ? '● WS' : '○ WS'}
+              </span>
+            )}
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4">
-        <FeedStatusBanner available={feedAvailable} lastUpdated={new Date()} />
+        {isLive && <FeedStatusBanner available={feedAvailable} lastUpdated={new Date()} />}
 
         {/* ── Scoreboard card ── */}
         <div className="bg-card rounded-2xl border border-white/5 overflow-hidden">
-          {/* Stage label */}
           <div className="px-6 pt-5 pb-2 flex items-center justify-between">
             <span className="text-[10px] uppercase tracking-widest text-slate-600 font-medium">{match.stage}</span>
             {match.venue && (
@@ -92,29 +108,37 @@ export default function MatchDetail() {
             )}
           </div>
 
-          {/* Teams + score */}
           <div className="flex items-center justify-between px-6 pb-6 gap-4">
-            {/* Home */}
             <div className="flex-1 flex flex-col items-center gap-2">
               <span className="text-5xl leading-none select-none">{homeFlag}</span>
               <p className="text-base font-bold text-white text-center">{match.home_team?.name ?? 'Home'}</p>
               <p className="text-[11px] text-slate-600 uppercase tracking-widest">{match.home_team?.country_code}</p>
             </div>
 
-            {/* Center: score or time */}
-            <div className="flex-shrink-0 text-center">
-              {showScore ? (
-                <span className={`font-display text-6xl font-black leading-none tracking-tight${
-                  match.status === 'live' ? ' text-gold' : ' text-white'
+            <div className="flex-shrink-0 text-center min-w-[100px]">
+              {isFinished || isLive ? (
+                <span className={`font-display text-6xl font-black leading-none tracking-tight ${
+                  isLive ? 'text-gold' : 'text-white'
                 }`}>
                   {match.home_score ?? 0}–{match.away_score ?? 0}
                 </span>
               ) : (
-                <span className="font-display text-xl font-bold text-slate-600 tracking-widest">VS</span>
+                <div className="space-y-1">
+                  <span className="font-display text-xl font-bold text-slate-600 tracking-widest block">VS</span>
+                  <p className="text-[11px] text-slate-500 tabular-nums">
+                    {new Date(match.scheduled_at).toLocaleDateString('en-GB', {
+                      day: 'numeric', month: 'short',
+                    })}
+                  </p>
+                  <p className="text-[11px] text-slate-400 tabular-nums font-medium">
+                    {new Date(match.scheduled_at).toLocaleTimeString('en-GB', {
+                      hour: '2-digit', minute: '2-digit',
+                    })} UTC
+                  </p>
+                </div>
               )}
             </div>
 
-            {/* Away */}
             <div className="flex-1 flex flex-col items-center gap-2">
               <span className="text-5xl leading-none select-none">{awayFlag}</span>
               <p className="text-base font-bold text-white text-center">{match.away_team?.name ?? 'Away'}</p>
@@ -123,27 +147,89 @@ export default function MatchDetail() {
           </div>
         </div>
 
-        {/* ── AI Prediction ── */}
-        {prediction && match.status !== 'finished' && (
+        {/* ── Finished: AI prediction vs actual result ── */}
+        {isFinished && (
+          <div className="bg-card rounded-2xl border border-white/5 overflow-hidden">
+            {/* Accuracy badge */}
+            {wasCorrect !== null && (
+              <div className={`px-5 py-3 flex items-center gap-2 text-sm font-bold border-b ${
+                wasCorrect
+                  ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                  : 'bg-red-500/10 border-red-500/20 text-red-400'
+              }`}>
+                <span className="text-base">{wasCorrect ? '✓' : '✗'}</span>
+                <span>AI {wasCorrect ? 'Predicted Correctly' : 'Got This Wrong'}</span>
+                {predictedOutcome && (
+                  <span className="ml-auto text-[11px] font-normal opacity-75">
+                    Predicted: {OUTCOME_LABEL[predictedOutcome] ?? predictedOutcome}
+                    {actualOutcome && predictedOutcome !== actualOutcome && (
+                      <> · Actual: {OUTCOME_LABEL[actualOutcome] ?? actualOutcome}</>
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div className="p-5 space-y-5">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-widest text-slate-600">
+                  AI Pre-Match Prediction
+                </p>
+                {displayPrediction?.expected_home_goals !== undefined && (
+                  <p className="text-[11px] text-slate-500">
+                    xG: <span className="text-slate-300 font-medium tabular-nums">
+                      {displayPrediction.expected_home_goals.toFixed(1)} – {displayPrediction.expected_away_goals.toFixed(1)}
+                    </span>
+                  </p>
+                )}
+              </div>
+
+              {displayPrediction ? (
+                <ProbabilityBar
+                  homeWinProb={displayPrediction.home_win_prob}
+                  drawProb={displayPrediction.draw_prob}
+                  awayWinProb={displayPrediction.away_win_prob}
+                  homeTeamName={match.home_team?.name ?? 'Home'}
+                  awayTeamName={match.away_team?.name ?? 'Away'}
+                  confidenceLow={displayPrediction.confidence_low}
+                  confidenceHigh={displayPrediction.confidence_high}
+                />
+              ) : (
+                <p className="text-slate-600 text-sm">No pre-match prediction on record.</p>
+              )}
+
+              {factors.length > 0 && (
+                <div className="pt-3 border-t border-white/[0.06]">
+                  <FactorsPanel factors={factors} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Live / Upcoming: AI prediction ── */}
+        {!isFinished && displayPrediction && (
           <div className="bg-card rounded-2xl border border-white/5 p-5 space-y-5">
             <div className="flex items-center justify-between">
-              <p className="text-[10px] uppercase tracking-widest text-slate-600">AI Prediction</p>
-              {prediction.expected_home_goals !== undefined && (
+              <p className="text-[10px] uppercase tracking-widest text-slate-600">
+                {isLive ? 'Live AI Prediction' : 'AI Pre-Match Prediction'}
+              </p>
+              {displayPrediction.expected_home_goals !== undefined && (
                 <p className="text-[11px] text-slate-500">
                   xG: <span className="text-slate-300 font-medium tabular-nums">
-                    {prediction.expected_home_goals.toFixed(1)} – {prediction.expected_away_goals.toFixed(1)}
+                    {displayPrediction.expected_home_goals.toFixed(1)} – {displayPrediction.expected_away_goals.toFixed(1)}
                   </span>
                 </p>
               )}
             </div>
             <ProbabilityBar
-              homeWinProb={prediction.home_win_prob}
-              drawProb={prediction.draw_prob}
-              awayWinProb={prediction.away_win_prob}
+              homeWinProb={displayPrediction.home_win_prob}
+              drawProb={displayPrediction.draw_prob}
+              awayWinProb={displayPrediction.away_win_prob}
               homeTeamName={match.home_team?.name ?? 'Home'}
               awayTeamName={match.away_team?.name ?? 'Away'}
-              confidenceLow={prediction.confidence_low}
-              confidenceHigh={prediction.confidence_high}
+              confidenceLow={displayPrediction.confidence_low}
+              confidenceHigh={displayPrediction.confidence_high}
             />
             {factors.length > 0 && (
               <div className="pt-3 border-t border-white/[0.06]">
@@ -156,7 +242,7 @@ export default function MatchDetail() {
         {/* ── Probability timeline ── */}
         {chartData.length > 1 && (
           <div className="bg-card rounded-2xl border border-white/5 p-5">
-            <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-4">Probability Timeline</p>
+            <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-4">Prediction Timeline</p>
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={chartData}>
                 <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 10 }} />
@@ -175,7 +261,7 @@ export default function MatchDetail() {
         )}
 
         {/* ── Live event log ── */}
-        {(match.status === 'live' || match.status === 'halftime' || liveEvents.length > 0) && (
+        {(isLive || liveEvents.length > 0) && (
           <div className="bg-card rounded-2xl border border-white/5 p-5">
             <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-4">Match Events</p>
             <LiveEventLog events={liveEvents} />

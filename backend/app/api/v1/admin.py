@@ -2,14 +2,57 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.live_event import LiveEvent
+from app.models.match import Match
 from app.schemas.prediction import PredictionResponse, FactorItem
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+class MatchResultRequest(BaseModel):
+    home_score: int
+    away_score: int
+    status: str = "finished"
+
+
+@router.patch("/matches/{match_id}")
+async def update_match_result(
+    match_id: int,
+    body: MatchResultRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Manually set a match result (for testing or manual data entry).
+
+    Updates the score and status, then triggers accuracy recording,
+    Elo update, and re-prediction for remaining matches — the same
+    pipeline as the automated ESPN ingestion.
+    """
+    result = await db.execute(select(Match).where(Match.id == match_id))
+    match = result.scalar_one_or_none()
+    if match is None:
+        raise HTTPException(status_code=404, detail=f"Match {match_id} not found")
+
+    previous_status = match.status
+    await db.execute(
+        update(Match)
+        .where(Match.id == match_id)
+        .values(home_score=body.home_score, away_score=body.away_score, status=body.status)
+    )
+    await db.commit()
+
+    if body.status == "finished" and previous_status != "finished":
+        import asyncio
+        from app.services.ingestion import _record_accuracy_and_learn
+        asyncio.create_task(_record_accuracy_and_learn(match_id, body.home_score, body.away_score))
+        from app.services.broadcast import manager
+        asyncio.create_task(manager.broadcast_all({"type": "accuracy_update"}))
+
+    return {"ok": True, "match_id": match_id, "home_score": body.home_score, "away_score": body.away_score}
 
 
 class SimulateEventRequest(BaseModel):
