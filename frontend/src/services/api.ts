@@ -4,6 +4,7 @@ import type {
   Prediction,
   PredictionHistoryResponse,
   AccuracyResponse,
+  StandingsResponse,
 } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -30,5 +31,6 @@ export const api = {
   getLatestPrediction: (matchId: number) => apiFetch<Prediction>(`/api/v1/predictions/${matchId}/latest`),
   getPredictionHistory: (matchId: number) => apiFetch<PredictionHistoryResponse>(`/api/v1/predictions/${matchId}/history`),
   getAccuracy: () => apiFetch<AccuracyResponse>('/api/v1/accuracy'),
+  getStandings: () => apiFetch<StandingsResponse>('/api/v1/standings'),
   health: () => apiFetch<{ status: string; environment: string }>('/health'),
 };

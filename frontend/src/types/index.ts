@@ -87,6 +87,26 @@ export interface TeamStanding {
   projected?: boolean; // true when at least one match is AI-projected
 }
 
+// ESPN live standings (from /api/v1/standings)
+export interface LiveStandingEntry {
+  team_abbr: string;
+  team_name: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goals_for: number;
+  goals_against: number;
+  goal_diff: number;
+  points: number;
+  note: string;
+  note_color: string;
+}
+
+export interface StandingsResponse {
+  groups: Record<string, LiveStandingEntry[]>;
+}
+
 // WebSocket message types
 export type WSMessageType = 'connected' | 'prediction_update' | 'live_event' | 'match_status_change' | 'feed_status' | 'accuracy_update' | 'ping' | 'pong';
 

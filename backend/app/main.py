@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import accuracy, admin, matches, predictions, websocket
+from app.api.v1 import accuracy, admin, matches, predictions, standings, websocket
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.services.ingestion import run_polling_loop
@@ -57,6 +57,7 @@ app.add_middleware(
 app.include_router(matches.router, prefix="/api/v1")
 app.include_router(predictions.router, prefix="/api/v1")
 app.include_router(accuracy.router, prefix="/api/v1")
+app.include_router(standings.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(websocket.router)
 

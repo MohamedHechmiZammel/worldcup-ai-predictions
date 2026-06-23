@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatches } from '../hooks/useMatches';
+import { useStandings } from '../hooks/useStandings';
 import MatchCard from '../components/MatchCard';
 import AccuracyPanel from '../components/AccuracyPanel';
 import GroupStandings from '../components/GroupStandings';
@@ -10,6 +11,7 @@ const KNOCKOUT_STAGES = ['Round of 32','Round of 16','Quarter-finals','Semi-fina
 
 export default function Dashboard() {
   const { matchesByStage, isLoading, error, data } = useMatches();
+  const { data: standingsData } = useStandings();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>('');
 
@@ -186,7 +188,11 @@ export default function Dashboard() {
               {/* Group standings — only for group stage tabs */}
               {activeTab.startsWith('Group ') && (
                 <div className="mt-6">
-                  <GroupStandings matches={activeMatches} />
+                  <GroupStandings
+                    matches={activeMatches}
+                    groupLetter={activeLetter}
+                    liveStandings={standingsData?.groups?.[activeLetter]}
+                  />
                 </div>
               )}
             </div>
