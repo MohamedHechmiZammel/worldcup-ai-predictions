@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import Dashboard from './pages/Dashboard';
 import MatchDetail from './pages/MatchDetail';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/match/:id" element={<ErrorBoundary><MatchDetail /></ErrorBoundary>} />
         </Routes>
       </BrowserRouter>
+      <Analytics />
     </QueryClientProvider>
   );
 }
