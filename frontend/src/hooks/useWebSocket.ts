@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { Prediction, LiveEvent, WSMessage } from '../types';
+import type { Prediction, LiveEvent, LiveMatchStateData, WSMessage } from '../types';
 import { usePredictionsStore } from '../store/predictions';
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected';
@@ -10,6 +10,7 @@ export function useWebSocket(matchId: number) {
   const updatePrediction = usePredictionsStore(s => s.updatePrediction);
   const addLiveEvent = usePredictionsStore(s => s.addLiveEvent);
   const setFeedStatus = usePredictionsStore(s => s.setFeedStatus);
+  const setMatchState = usePredictionsStore(s => s.setMatchState);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -26,6 +27,11 @@ export function useWebSocket(matchId: number) {
       case 'live_event':
         if (msg.payload) {
           addLiveEvent(matchId, msg.payload as LiveEvent);
+        }
+        break;
+      case 'match_state_update':
+        if (msg.payload) {
+          setMatchState(matchId, msg.payload as LiveMatchStateData);
         }
         break;
       case 'match_status_change':
@@ -47,7 +53,7 @@ export function useWebSocket(matchId: number) {
         wsRef.current?.send(JSON.stringify({ type: 'pong' }));
         break;
     }
-  }, [matchId, queryClient, updatePrediction, addLiveEvent, setFeedStatus]);
+  }, [matchId, queryClient, updatePrediction, addLiveEvent, setFeedStatus, setMatchState]);
 
   // Forward-declare scheduleReconnect so connect can reference it
   const scheduleReconnectRef = useRef<() => void>(() => undefined);

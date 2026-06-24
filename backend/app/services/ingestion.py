@@ -111,13 +111,32 @@ async def _process_match_state(db, state: LiveMatchState) -> None:
         )
     )
 
+    from app.services.broadcast import manager
+
     # 3. Trigger accuracy + Elo learning when match finishes
     if state.status == "finished" and previous_status != "finished":
         asyncio.create_task(
             _record_accuracy_and_learn(match.id, state.home_score, state.away_score)
         )
-        from app.services.broadcast import manager
         asyncio.create_task(manager.broadcast_all({"type": "accuracy_update"}))
+        # Notify the match room so the frontend re-fetches and shows the final state
+        asyncio.create_task(manager.broadcast_to_match(str(match.id), {
+            "type": "match_status_change",
+            "payload": {"status": "finished", "home_score": state.home_score, "away_score": state.away_score},
+        }))
+
+    # 4a. Push live stats every poll cycle so the UI clock and stats stay current
+    if state.status in ("live", "halftime") and (state.home_stats or state.away_stats):
+        asyncio.create_task(manager.broadcast_to_match(str(match.id), {
+            "type": "match_state_update",
+            "payload": {
+                "minute": state.minute,
+                "period": state.period,
+                "period_description": state.period_description,
+                "home_stats": state.home_stats,
+                "away_stats": state.away_stats,
+            },
+        }))
 
     # 4. Process each event with deduplication
     for event in state.events:

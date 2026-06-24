@@ -93,6 +93,23 @@ class ESPNAdapter(FootballDataProvider):
         except (ValueError, IndexError):
             minute = None
 
+        # Parse per-team live statistics (possession, shots, corners, fouls)
+        home_stats: dict | None = None
+        away_stats: dict | None = None
+        for competitor in comp.get("competitors", []):
+            raw = competitor.get("statistics", [])
+            if not raw:
+                continue
+            parsed = {s["name"]: s.get("displayValue", s.get("value")) for s in raw if "name" in s}
+            if competitor.get("homeAway") == "home":
+                home_stats = parsed
+            else:
+                away_stats = parsed
+
+        # Period and human-readable description ("First Half", "Halftime", "Final")
+        period = status_obj.get("period")
+        period_description = status_obj.get("type", {}).get("description", "")
+
         return LiveMatchState(
             external_match_id=f"espn_{game_id}",
             home_team_code=home_team_code,
@@ -102,6 +119,10 @@ class ESPNAdapter(FootballDataProvider):
             status=status_type,
             minute=minute,
             events=events,
+            period=period,
+            period_description=period_description,
+            home_stats=home_stats,
+            away_stats=away_stats,
         )
 
     def normalize_event(self, raw: dict, home_score: int, away_score: int) -> MatchEvent:

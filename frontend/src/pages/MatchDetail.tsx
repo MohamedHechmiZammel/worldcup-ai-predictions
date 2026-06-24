@@ -6,6 +6,7 @@ import ProbabilityBar from '../components/ProbabilityBar';
 import FactorsPanel from '../components/FactorsPanel';
 import LiveBadge from '../components/LiveBadge';
 import LiveEventLog from '../components/LiveEventLog';
+import LiveStatsPanel from '../components/LiveStatsPanel/LiveStatsPanel';
 import FeedStatusBanner from '../components/FeedStatusBanner';
 import { getFlag } from '../utils/flags';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -28,6 +29,7 @@ export default function MatchDetail() {
   const livePrediction = usePredictionsStore(s => s.predictions[matchId]);
   const liveEvents = usePredictionsStore(s => s.liveEvents[matchId]) ?? [];
   const feedAvailable = usePredictionsStore(s => s.feedStatus[matchId] ?? true);
+  const liveMatchState = usePredictionsStore(s => s.liveMatchState[matchId]);
 
   if (isLoading) {
     return (
@@ -96,6 +98,15 @@ export default function MatchDetail() {
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         {isLive && <FeedStatusBanner available={feedAvailable} lastUpdated={new Date()} />}
+
+        {/* ── Live ESPN stats (possession, shots, corners, fouls) ── */}
+        {isLive && liveMatchState && (
+          <LiveStatsPanel
+            matchState={liveMatchState}
+            homeTeamName={match.home_team?.name ?? 'Home'}
+            awayTeamName={match.away_team?.name ?? 'Away'}
+          />
+        )}
 
         {/* ── Scoreboard card ── */}
         <div className="bg-card rounded-2xl border border-white/5 overflow-hidden">

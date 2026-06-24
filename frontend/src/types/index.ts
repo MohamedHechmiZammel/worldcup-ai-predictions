@@ -107,8 +107,16 @@ export interface StandingsResponse {
   groups: Record<string, LiveStandingEntry[]>;
 }
 
+export interface LiveMatchStateData {
+  minute: number | null;
+  period: number | null;
+  period_description: string;
+  home_stats: Record<string, string | number> | null;
+  away_stats: Record<string, string | number> | null;
+}
+
 // WebSocket message types
-export type WSMessageType = 'connected' | 'prediction_update' | 'live_event' | 'match_status_change' | 'feed_status' | 'accuracy_update' | 'ping' | 'pong';
+export type WSMessageType = 'connected' | 'prediction_update' | 'live_event' | 'match_status_change' | 'match_state_update' | 'feed_status' | 'accuracy_update' | 'ping' | 'pong';
 
 export interface WSMessage {
   type: WSMessageType;

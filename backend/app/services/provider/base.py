@@ -28,6 +28,10 @@ class LiveMatchState:
     status: str              # scheduled | live | halftime | finished
     minute: int | None
     events: list[MatchEvent]
+    period: int | None = None             # 1 = first half, 2 = second half
+    period_description: str = ""          # "First Half" | "Halftime" | "Final" etc.
+    home_stats: dict | None = None        # ESPN per-team live statistics
+    away_stats: dict | None = None
 
 
 class FootballDataProvider(ABC):
