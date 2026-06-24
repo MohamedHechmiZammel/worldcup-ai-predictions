@@ -74,7 +74,7 @@ World_cup/
 ### Run the full stack
 
 ```bash
-git clone https://github.com/your-username/World_cup.git
+git clone https://github.com/MohamedHechmiZammel/worldcup-ai-predictions.git
 cd World_cup
 docker compose up --build
 ```
