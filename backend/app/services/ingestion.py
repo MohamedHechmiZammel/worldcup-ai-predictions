@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import date, timedelta
 import httpx
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -17,6 +18,9 @@ from app.services.provider.mock import MockProvider
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 15
+ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard"
+WC2026_START = date(2026, 6, 11)
+HISTORICAL_SYNC_INTERVAL_HOURS = 6
 
 
 def _get_provider():
@@ -300,3 +304,68 @@ async def _broadcast_feed_status(available: bool, reason: str = "") -> None:
             "type": "feed_status",
             "payload": {"available": available, "reason": reason}
         })
+
+
+# ---------------------------------------------------------------------------
+# Historical sync — backfill past match results automatically
+# ---------------------------------------------------------------------------
+
+async def _sync_past_date(adapter: ESPNAdapter, date_str: str) -> int:
+    """Fetch ESPN scoreboard for one date and update any finished matches. Returns count updated."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(ESPN_SCOREBOARD_URL, params={"dates": date_str})
+            resp.raise_for_status()
+            events = resp.json().get("events", [])
+    except Exception:
+        logger.warning("Historical sync: failed to fetch ESPN for %s", date_str)
+        return 0
+
+    updated = 0
+    for event in events:
+        try:
+            state = adapter._parse_event(event)
+            if state is None or state.status != "finished":
+                continue
+            async with AsyncSessionLocal() as db:
+                async with db.begin():
+                    await _process_match_state(db, state)
+            updated += 1
+        except Exception:
+            logger.exception("Historical sync: error processing event on %s", date_str)
+
+    return updated
+
+
+async def run_historical_sync() -> None:
+    """Backfill all past ESPN results on startup, then repeat every 6 hours.
+
+    ESPN's default scoreboard only shows today's matches, so finished results
+    from prior days must be explicitly fetched by date. This task runs once at
+    startup (catching up any gap from restarts or sleeps) then loops every
+    HISTORICAL_SYNC_INTERVAL_HOURS to cover matches that finished overnight.
+    """
+    await asyncio.sleep(15)  # let the polling loop and DB warm up first
+
+    adapter = ESPNAdapter()
+
+    while True:
+        today = date.today()
+        current = WC2026_START
+        total_updated = 0
+
+        logger.info("Historical sync: scanning %s → %s", WC2026_START, today - timedelta(days=1))
+
+        while current < today:  # today is handled by the live polling loop
+            date_str = current.strftime("%Y%m%d")
+            count = await _sync_past_date(adapter, date_str)
+            total_updated += count
+            current += timedelta(days=1)
+            await asyncio.sleep(0.5)  # gentle pacing — don't hammer ESPN
+
+        if total_updated:
+            logger.info("Historical sync complete — %d new results recorded", total_updated)
+        else:
+            logger.info("Historical sync complete — all past results already up to date")
+
+        await asyncio.sleep(HISTORICAL_SYNC_INTERVAL_HOURS * 3600)

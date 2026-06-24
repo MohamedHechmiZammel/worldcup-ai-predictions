@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import accuracy, admin, matches, predictions, standings, websocket
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
-from app.services.ingestion import run_polling_loop
+from app.services.ingestion import run_polling_loop, run_historical_sync
 from app.services.prediction_engine import prediction_engine
 
 logger = logging.getLogger(__name__)
@@ -26,17 +26,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception:
             logger.exception("Failed to load prediction engine at startup")
 
-    # Start live data polling
+    # Start live data polling (today's matches every 15 s)
     polling_task = asyncio.create_task(run_polling_loop())
+    # Backfill past results on startup, then repeat every 6 h
+    sync_task = asyncio.create_task(run_historical_sync())
 
     yield
 
-    # Shutdown: cancel polling
     polling_task.cancel()
-    try:
-        await polling_task
-    except asyncio.CancelledError:
-        pass
+    sync_task.cancel()
+    for task in (polling_task, sync_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
