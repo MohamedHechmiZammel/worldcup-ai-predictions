@@ -68,6 +68,7 @@ async def _process_match_state(db, state: LiveMatchState) -> None:
     match = result.scalar_one_or_none()
 
     # Fallback: match by home/away country codes for seeded data without external_id
+    scores_swapped = False  # tracks whether ESPN home/away is reversed vs our DB
     if match is None:
         HomeTeam = aliased(Team)
         AwayTeam = aliased(Team)
@@ -84,7 +85,6 @@ async def _process_match_state(db, state: LiveMatchState) -> None:
         fb_result = await db.execute(fallback_stmt)
         match = fb_result.scalar_one_or_none()
         if match is not None:
-            # Auto-link so future polls hit the fast path
             await db.execute(
                 update(Match)
                 .where(Match.id == match.id)
@@ -95,18 +95,50 @@ async def _process_match_state(db, state: LiveMatchState) -> None:
                 match.id, state.home_team_code, state.away_team_code, state.external_match_id,
             )
 
+    # Second fallback: ESPN home/away may be reversed vs our seeded fixtures
+    if match is None:
+        HomeTeam2 = aliased(Team)
+        AwayTeam2 = aliased(Team)
+        reversed_stmt = (
+            select(Match)
+            .join(HomeTeam2, Match.home_team_id == HomeTeam2.id)
+            .join(AwayTeam2, Match.away_team_id == AwayTeam2.id)
+            .where(
+                Match.status.in_(["scheduled", "live", "halftime"]),
+                HomeTeam2.country_code == state.away_team_code,
+                AwayTeam2.country_code == state.home_team_code,
+            )
+        )
+        rv_result = await db.execute(reversed_stmt)
+        match = rv_result.scalar_one_or_none()
+        if match is not None:
+            scores_swapped = True
+            await db.execute(
+                update(Match)
+                .where(Match.id == match.id)
+                .values(external_id=state.external_match_id)
+            )
+            logger.info(
+                "Auto-linked (reversed) match_id=%d (%s vs %s) → external_id=%s",
+                match.id, state.away_team_code, state.home_team_code, state.external_match_id,
+            )
+
     if match is None:
         return  # unknown match, skip
 
     previous_status = match.status
+
+    # Swap scores when ESPN home/away order is reversed relative to our DB
+    db_home_score = state.away_score if scores_swapped else state.home_score
+    db_away_score = state.home_score if scores_swapped else state.away_score
 
     # 2. Update match score and status
     await db.execute(
         update(Match)
         .where(Match.id == match.id)
         .values(
-            home_score=state.home_score,
-            away_score=state.away_score,
+            home_score=db_home_score,
+            away_score=db_away_score,
             status=state.status,
         )
     )
@@ -116,25 +148,28 @@ async def _process_match_state(db, state: LiveMatchState) -> None:
     # 3. Trigger accuracy + Elo learning when match finishes
     if state.status == "finished" and previous_status != "finished":
         asyncio.create_task(
-            _record_accuracy_and_learn(match.id, state.home_score, state.away_score)
+            _record_accuracy_and_learn(match.id, db_home_score, db_away_score)
         )
         asyncio.create_task(manager.broadcast_all({"type": "accuracy_update"}))
         # Notify the match room so the frontend re-fetches and shows the final state
         asyncio.create_task(manager.broadcast_to_match(str(match.id), {
             "type": "match_status_change",
-            "payload": {"status": "finished", "home_score": state.home_score, "away_score": state.away_score},
+            "payload": {"status": "finished", "home_score": db_home_score, "away_score": db_away_score},
         }))
 
     # 4a. Push live stats every poll cycle so the UI clock and stats stay current
-    if state.status in ("live", "halftime") and (state.home_stats or state.away_stats):
+    # Swap stats to match our DB home/away perspective when ESPN order is reversed
+    broadcast_home_stats = state.away_stats if scores_swapped else state.home_stats
+    broadcast_away_stats = state.home_stats if scores_swapped else state.away_stats
+    if state.status in ("live", "halftime") and (broadcast_home_stats or broadcast_away_stats):
         asyncio.create_task(manager.broadcast_to_match(str(match.id), {
             "type": "match_state_update",
             "payload": {
                 "minute": state.minute,
                 "period": state.period,
                 "period_description": state.period_description,
-                "home_stats": state.home_stats,
-                "away_stats": state.away_stats,
+                "home_stats": broadcast_home_stats,
+                "away_stats": broadcast_away_stats,
             },
         }))
 
