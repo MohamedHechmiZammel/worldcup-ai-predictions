@@ -1,6 +1,7 @@
 import type {
   Match,
   MatchListResponse,
+  MatchStatsResponse,
   Prediction,
   PredictionHistoryResponse,
   AccuracyResponse,
@@ -28,6 +29,7 @@ export const api = {
     return apiFetch<MatchListResponse>(`/api/v1/matches${qs ? `?${qs}` : ''}`);
   },
   getMatch: (id: number) => apiFetch<Match>(`/api/v1/matches/${id}`),
+  getMatchStats: (id: number) => apiFetch<MatchStatsResponse>(`/api/v1/matches/${id}/stats`),
   getLatestPrediction: (matchId: number) => apiFetch<Prediction>(`/api/v1/predictions/${matchId}/latest`),
   getPredictionHistory: (matchId: number) => apiFetch<PredictionHistoryResponse>(`/api/v1/predictions/${matchId}/history`),
   getAccuracy: () => apiFetch<AccuracyResponse>('/api/v1/accuracy'),

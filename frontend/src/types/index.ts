@@ -115,6 +115,11 @@ export interface LiveMatchStateData {
   away_stats: Record<string, string | number> | null;
 }
 
+export interface MatchStatsResponse extends LiveMatchStateData {
+  match_id: number;
+  available: boolean;
+}
+
 // WebSocket message types
 export type WSMessageType = 'connected' | 'prediction_update' | 'live_event' | 'match_status_change' | 'match_state_update' | 'feed_status' | 'accuracy_update' | 'ping' | 'pong';
 

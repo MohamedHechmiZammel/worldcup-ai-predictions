@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
-import { useMatch, usePredictionHistory } from '../hooks/useMatch';
+import { useMatch, useMatchStats, usePredictionHistory } from '../hooks/useMatch';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { usePredictionsStore } from '../store/predictions';
 import ProbabilityBar from '../components/ProbabilityBar';
@@ -24,12 +24,16 @@ export default function MatchDetail() {
 
   const { data: match, isLoading } = useMatch(matchId);
   const { data: history } = usePredictionHistory(matchId);
+  const { data: restStats } = useMatchStats(matchId, match?.status);
   const { connectionState } = useWebSocket(matchId);
 
   const livePrediction = usePredictionsStore(s => s.predictions[matchId]);
   const liveEvents = usePredictionsStore(s => s.liveEvents[matchId]) ?? [];
   const feedAvailable = usePredictionsStore(s => s.feedStatus[matchId] ?? true);
   const liveMatchState = usePredictionsStore(s => s.liveMatchState[matchId]);
+
+  // WebSocket data is most current for live matches; REST is used for finished or initial load
+  const displayStats = liveMatchState ?? (restStats?.available ? restStats : null);
 
   if (isLoading) {
     return (
@@ -99,12 +103,13 @@ export default function MatchDetail() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         {isLive && <FeedStatusBanner available={feedAvailable} lastUpdated={new Date()} />}
 
-        {/* ── Live ESPN stats (possession, shots, corners, fouls) ── */}
-        {isLive && liveMatchState && (
+        {/* ── Match stats: live (WebSocket) or final (REST) ── */}
+        {(isLive || isFinished) && displayStats && (
           <LiveStatsPanel
-            matchState={liveMatchState}
+            matchState={displayStats}
             homeTeamName={match.home_team?.name ?? 'Home'}
             awayTeamName={match.away_team?.name ?? 'Away'}
+            isFinished={isFinished}
           />
         )}
 

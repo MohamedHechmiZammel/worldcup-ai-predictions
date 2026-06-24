@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,8 @@ from app.models.match import Match
 from app.models.prediction import Prediction
 from app.schemas.match import AccuracyInfo, MatchListResponse, MatchResponse
 from app.schemas.prediction import FactorItem, PredictionResponse
+
+ESPN_SUMMARY_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary"
 
 STAGE_PRIORITY = {
     **{f"Group {letter}": i for i, letter in enumerate("ABCDEFGHIJKL")},
@@ -180,3 +183,62 @@ async def get_match(
         accuracy_record = acc_result.scalar_one_or_none()
 
     return _build_match_response(match, latest_pred, accuracy_record)
+
+
+@router.get("/{match_id}/stats")
+async def get_match_stats(match_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Return ESPN live/final stats for a match (possession, shots, corners, fouls).
+
+    Uses the ESPN summary endpoint keyed by the match's external_id (espn_{event_id}).
+    Returns available=False when no ESPN ID is linked yet (match not yet tracked).
+    """
+    stmt = select(Match).where(Match.id == match_id)
+    result = await db.execute(stmt)
+    match = result.scalar_one_or_none()
+    if match is None:
+        raise HTTPException(status_code=404, detail=f"Match {match_id} not found")
+
+    ext = match.external_id or ""
+    if not ext.startswith("espn_"):
+        return {"match_id": match_id, "available": False}
+
+    event_id = ext[len("espn_"):]
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(ESPN_SUMMARY_URL, params={"event": event_id})
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        return {"match_id": match_id, "available": False}
+
+    home_stats: dict = {}
+    away_stats: dict = {}
+    for team in data.get("boxscore", {}).get("teams", []):
+        parsed = {
+            s["name"]: s.get("displayValue", s.get("value"))
+            for s in team.get("statistics", [])
+            if "name" in s
+        }
+        if team.get("homeAway") == "home":
+            home_stats = parsed
+        else:
+            away_stats = parsed
+
+    competition = data.get("header", {}).get("competitions", [{}])[0]
+    status = competition.get("status", {})
+    period_description = status.get("type", {}).get("description", "")
+    clock_str = status.get("displayClock", "0:00")
+    try:
+        minute = int(clock_str.split(":")[0])
+    except (ValueError, IndexError):
+        minute = None
+
+    return {
+        "match_id": match_id,
+        "available": True,
+        "minute": minute,
+        "period": status.get("period"),
+        "period_description": period_description,
+        "home_stats": home_stats,
+        "away_stats": away_stats,
+    }
