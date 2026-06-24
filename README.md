@@ -2,7 +2,7 @@
 
 A real-time AI prediction dashboard for the 2026 FIFA World Cup. Every match gets win/draw/loss probabilities powered by an XGBoost model trained on Elo ratings, head-to-head history, and FIFA rankings — updated live via WebSocket as match events arrive.
 
-**Live demo**: [worldcup-dashboard-zeta.vercel.app](https://worldcup-dashboard-zeta.vercel.app)
+**Live demo**: [worldcup-dashboard-zeta.vercel.app](https://worldcup-dashboard-zeta.vercel.app/)
 
 ---
 
@@ -75,7 +75,7 @@ World_cup/
 
 ```bash
 git clone https://github.com/MohamedHechmiZammel/worldcup-ai-predictions.git
-cd World_cup
+cd worldcup-ai-predictions
 docker compose up --build
 ```
 
