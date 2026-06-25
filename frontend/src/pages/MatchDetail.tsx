@@ -101,14 +101,27 @@ export default function MatchDetail() {
         {isLive && <FeedStatusBanner available={feedAvailable} lastUpdated={new Date()} />}
 
         {/* ── Match stats: live (WebSocket) or final (REST) ── */}
-        {(isLive || isFinished) && displayStats && (
+        {isLive && displayStats && (
           <LiveStatsPanel
             matchState={displayStats}
             homeTeamName={match.home_team?.name ?? 'Home'}
             awayTeamName={match.away_team?.name ?? 'Away'}
-            isFinished={isFinished}
+            isFinished={false}
           />
         )}
+        {isFinished && (displayStats ? (
+          <LiveStatsPanel
+            matchState={displayStats}
+            homeTeamName={match.home_team?.name ?? 'Home'}
+            awayTeamName={match.away_team?.name ?? 'Away'}
+            isFinished={true}
+          />
+        ) : (
+          <div className="bg-card rounded-2xl border border-white/5 px-5 py-4 flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-widest text-slate-600 font-medium">Match Stats</span>
+            <span className="text-[11px] text-slate-600 ml-auto">Not available for this match</span>
+          </div>
+        ))}
 
         {/* ── Scoreboard card ── */}
         <div className="bg-card rounded-2xl border border-white/5 overflow-hidden">

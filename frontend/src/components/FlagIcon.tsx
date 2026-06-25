@@ -28,7 +28,6 @@ export default function FlagIcon({ countryCode, size = 'lg', className = '' }: F
   return (
     <span
       className={`fi fi-${iso2} inline-block rounded-sm ${sizeClass} ${className}`}
-      style={{ backgroundSize: 'cover' }}
       aria-hidden="true"
     />
   );
