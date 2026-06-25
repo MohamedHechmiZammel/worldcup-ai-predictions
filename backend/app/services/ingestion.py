@@ -71,8 +71,20 @@ async def _process_match_state(db, state: LiveMatchState) -> None:
     result = await db.execute(match_stmt)
     match = result.scalar_one_or_none()
 
+    # Verify home/away alignment even when found by external_id.
+    # Some fixtures are seeded with home/away reversed vs ESPN's convention.
+    # On first link we detect the swap via the reversed-fallback below; but on
+    # subsequent syncs the external_id lookup succeeds and we must re-check.
+    scores_swapped = False
+    if match is not None:
+        home_code_row = await db.execute(
+            select(Team.country_code).where(Team.id == match.home_team_id)
+        )
+        db_home_code = home_code_row.scalar_one_or_none()
+        if db_home_code and db_home_code != state.home_team_code:
+            scores_swapped = True
+
     # Fallback: match by home/away country codes for seeded data without external_id
-    scores_swapped = False  # tracks whether ESPN home/away is reversed vs our DB
     if match is None:
         HomeTeam = aliased(Team)
         AwayTeam = aliased(Team)

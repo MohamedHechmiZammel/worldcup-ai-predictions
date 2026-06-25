@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Match, Team, TeamStanding, LiveStandingEntry } from '../../types';
-import { getFlag } from '../../utils/flags';
+import FlagIcon from '../FlagIcon';
 
 interface GroupStandingsProps {
   matches: Match[];
@@ -233,7 +233,7 @@ export default function GroupStandings({ matches, liveStandings }: GroupStanding
                   </td>
                   <td className="px-2 py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-base leading-none select-none">{getFlag(r.abbr)}</span>
+                      <FlagIcon countryCode={r.abbr} size="sm" />
                       <span className={`font-medium truncate max-w-[120px] ${advance ? 'text-white' : 'text-slate-400'}`}>
                         {r.name}
                       </span>

@@ -2,8 +2,8 @@ import React from 'react';
 import type { Match, Factor } from '../../types';
 import LiveBadge from '../LiveBadge';
 import AIResultBadge from './AIResultBadge';
+import FlagIcon from '../FlagIcon';
 import { usePredictionsStore } from '../../store/predictions';
-import { getFlag } from '../../utils/flags';
 
 interface MatchCardProps {
   match: Match;
@@ -33,9 +33,6 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onClick }) => {
 
   const topFactors: Factor[] = effectivePrediction?.top_factors?.slice(0, 2) ?? [];
 
-  const homeFlag = getFlag(match.home_team?.country_code);
-  const awayFlag = getFlag(match.away_team?.country_code);
-
   return (
     <div
       className={`bg-card rounded-xl border border-white/5 flex flex-col overflow-hidden transition-all duration-200${
@@ -60,7 +57,7 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onClick }) => {
       <div className="flex items-center gap-3 px-4 py-3">
         {/* Home team */}
         <div className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
-          <span className="text-3xl leading-none select-none" aria-hidden="true">{homeFlag}</span>
+          <FlagIcon countryCode={match.home_team?.country_code} size="lg" />
           <span className="text-xs font-semibold text-slate-200 text-center leading-tight w-full truncate">
             {match.home_team?.name ?? 'Home'}
           </span>
@@ -81,7 +78,7 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onClick }) => {
 
         {/* Away team */}
         <div className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
-          <span className="text-3xl leading-none select-none" aria-hidden="true">{awayFlag}</span>
+          <FlagIcon countryCode={match.away_team?.country_code} size="lg" />
           <span className="text-xs font-semibold text-slate-200 text-center leading-tight w-full truncate">
             {match.away_team?.name ?? 'Away'}
           </span>

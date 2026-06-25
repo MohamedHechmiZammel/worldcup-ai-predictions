@@ -8,7 +8,7 @@ import LiveBadge from '../components/LiveBadge';
 import LiveEventLog from '../components/LiveEventLog';
 import LiveStatsPanel from '../components/LiveStatsPanel/LiveStatsPanel';
 import FeedStatusBanner from '../components/FeedStatusBanner';
-import { getFlag } from '../utils/flags';
+import FlagIcon from '../components/FlagIcon';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import type { Factor } from '../types';
 
@@ -68,9 +68,6 @@ export default function MatchDetail() {
     away: Math.round(p.away_win_prob * 100),
   }));
 
-  const homeFlag = getFlag(match.home_team?.country_code);
-  const awayFlag = getFlag(match.away_team?.country_code);
-
   // Determine actual outcome label for finished matches
   const actualOutcome = match.accuracy?.actual_outcome ?? null;
   const predictedOutcome = match.accuracy?.predicted_outcome ?? null;
@@ -126,7 +123,7 @@ export default function MatchDetail() {
 
           <div className="flex items-center justify-between px-6 pb-6 gap-4">
             <div className="flex-1 flex flex-col items-center gap-2">
-              <span className="text-5xl leading-none select-none">{homeFlag}</span>
+              <FlagIcon countryCode={match.home_team?.country_code} size="lg" className="!w-14 !h-10" />
               <p className="text-base font-bold text-white text-center">{match.home_team?.name ?? 'Home'}</p>
               <p className="text-[11px] text-slate-600 uppercase tracking-widest">{match.home_team?.country_code}</p>
             </div>
@@ -156,7 +153,7 @@ export default function MatchDetail() {
             </div>
 
             <div className="flex-1 flex flex-col items-center gap-2">
-              <span className="text-5xl leading-none select-none">{awayFlag}</span>
+              <FlagIcon countryCode={match.away_team?.country_code} size="lg" className="!w-14 !h-10" />
               <p className="text-base font-bold text-white text-center">{match.away_team?.name ?? 'Away'}</p>
               <p className="text-[11px] text-slate-600 uppercase tracking-widest">{match.away_team?.country_code}</p>
             </div>
